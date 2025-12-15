@@ -1,0 +1,56 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+*.pyo
+*.pyd
+.Python
+build/
+dist/
+wheels/
+*.egg-info
+*.egg
+
+# Virtual environments
+.venv
+venv/
+ENV/
+env/
+
+# Data files (large datasets)
+data/movies.json
+data/*.json
+
+# Cache files (generated indices)
+cache/
+*.pkl
+*.pickle
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# UV lock file (optional - some keep it)
+# uv.lock
+
+# Logs
+*.log
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# NLTK data (if downloaded locally)
+nltk_data/
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Jupyter notebooks (if you use them)
+.ipynb_checkpoints/
+*.ipynb
