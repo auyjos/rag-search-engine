@@ -20,3 +20,4 @@ def tokenize(text: str, stopwords: set[str] | None = None) -> list[str]:
         tokens = [token for token in tokens if token not in stopwords]
     tokens = [stemmer.stem(token) for token in tokens]
     return tokens
+
