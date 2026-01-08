@@ -54,3 +54,8 @@ htmlcov/
 # Jupyter notebooks (if you use them)
 .ipynb_checkpoints/
 *.ipynb
+
+# Environment variables
+.env
+.env.local
+.env.*.local
