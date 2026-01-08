@@ -30,6 +30,12 @@ def main() -> None:
     weighted_search_parser.add_argument("--alpha", type=float, default=0.5, help="Weight for BM25 vs semantic (default: 0.5)")
     weighted_search_parser.add_argument("--limit", type=int, default=5, help="Maximum number of results (default: 5)")
 
+      # Add rrf-search subcommand
+    rrf_search_parser = subparsers.add_parser("rrf-search", help="Perform hybrid search using Reciprocal Rank Fusion")
+    rrf_search_parser.add_argument("query", type=str, help="Search query")
+    rrf_search_parser.add_argument("-k", type=int, default=60, help="RRF k parameter (default: 60)")
+    rrf_search_parser.add_argument("--limit", type=int, default=5, help="Maximum number of results (default: 5)")
+
     args = parser.parse_args()
 
     match args.command:
@@ -58,6 +64,28 @@ def main() -> None:
                 print(f"   {desc_preview}")
                 if i < len(results[:args.limit]):
                     print()
+        case "rrf-search":
+            documents= load_movies()
+            hybrid_search = HybridSearch(documents)
+            results = hybrid_search.rrf_search(args.query, args.k, args.limit)
+
+            for i, result in enumerate(results[:args.limit],1):
+                doc = result["document"]
+                print(f"{i}. {doc['title']}")
+                print(f"   RRF Score: {result['rrf_score']:.3f}")
+                
+                # Display ranks
+                bm25_rank = result['bm25_rank'] if result['bm25_rank'] is not None else "-"
+                semantic_rank = result['semantic_rank'] if result['semantic_rank'] is not None else "-"
+                print(f"   BM25 Rank: {bm25_rank}, Semantic Rank: {semantic_rank}")
+                
+                # Truncate description to first 100 characters
+                description = doc.get('description', '')
+                desc_preview = description[:100] + "..." if len(description) > 100 else description
+                print(f"   {desc_preview}")
+                if i < len(results[:args.limit]):
+                    print()
+
         case _:
             parser.print_help()
 

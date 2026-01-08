@@ -105,6 +105,47 @@ class HybridSearch:
         sorted_results = sorted(combined_results.values(), key=lambda x: x["hybrid_score"], reverse=True)
         
         return sorted_results
+    
+    @staticmethod
+    def rrf_score(rank, k=60):
+        """Calculate RRF score for a given rank"""
+        return 1/ (k+rank)
 
     def rrf_search(self, query, k, limit=10):
-        raise NotImplementedError("RRF hybrid search is not implemented yet.")
+        """Perform hybrid search using Reciprocal Rank Fusion."""
+        search_limit = limit * 500
+        bm25_result = self._bm25_search(query, search_limit)
+        semantic_results = self.semantic_search.search_chunks(query, search_limit)
+
+        bm25_rank_map = {result["doc_id"]: i +1 for i, result in enumerate(bm25_result)}
+        semantic_rank_map = {result["id"]: i +1 for i, result in enumerate(semantic_results)}
+
+        doc_map = {doc["id"]: doc for doc in self.documents}
+
+        all_docs_ids = set(bm25_rank_map.keys()) | set(semantic_rank_map.keys())
+        combined_results = {}
+
+        for doc_id in all_docs_ids:
+            bm25_rank = bm25_rank_map.get(doc_id)
+            semantic_rank = semantic_rank_map.get(doc_id)
+
+            rrf_score_total = 0.0
+            if bm25_rank is not None:
+                rrf_score_total += self.rrf_score(bm25_rank, k)
+            if semantic_rank is not None:
+                rrf_score_total += self.rrf_score(semantic_rank, k)
+
+            doc = doc_map.get(doc_id)
+
+            if doc is not None:
+                combined_results[doc_id] = {
+                    "doc_id": doc_id,
+                    "document": doc,
+                    "bm25_rank": bm25_rank,
+                    "semantic_rank": semantic_rank,
+                    "rrf_score": rrf_score_total
+                }
+        # Sort by RRF score in descending order
+        sorted_results = sorted(combined_results.values(), key=lambda x: x["rrf_score"], reverse=True)
+        return sorted_results
+        
