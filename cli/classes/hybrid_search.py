@@ -149,3 +149,4 @@ class HybridSearch:
         sorted_results = sorted(combined_results.values(), key=lambda x: x["rrf_score"], reverse=True)
         return sorted_results
         
+        

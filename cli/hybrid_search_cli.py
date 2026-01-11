@@ -4,13 +4,18 @@ import os
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from cli.classes.hybrid_search import HybridSearch
+from cli.utils.gemini_functions import (enhance_query_expand,
+                                        enhance_query_rewrite,
+                                        enhance_query_spelling, rerank_batch,
+                                        rerank_cross_encoder,
+                                        rerank_individual)
 from dotenv import load_dotenv
 from google import genai
 
 # Add parent directory to path to allow imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from cli.classes.hybrid_search import HybridSearch
 
 
 def load_movies():
@@ -20,85 +25,6 @@ def load_movies():
     return data["movies"]
 
 
-def enhance_query_spelling(query: str, api_key: str) -> str:
-    """
-    Enhance query by correcting spelling errors using Gemini API.
-    
-    Args:
-        query: Original search query
-        api_key: Gemini API key
-        
-    Returns:
-        Enhanced query with corrected spelling
-    """
-    client = genai.Client(api_key=api_key)
-    
-    prompt = f"""Fix any spelling errors in this movie search query.
-
-Only correct obvious typos. Don't change correctly spelled words.
-
-Query: "{query}"
-
-If no errors, return the original query.
-Corrected:"""
-    
-    response = client.models.generate_content(
-        model="gemini-2.0-flash-001",
-        contents=prompt
-    )
-    
-    # Extract and clean the enhanced query
-    enhanced_query = response.text.strip()
-    
-    # Remove any quotation marks that might be in the response
-    enhanced_query = enhanced_query.strip('"').strip("'")
-    
-    return enhanced_query
-
-def enhance_query_rewrite(query: str, api_key: str) -> str:
-    """
-    Rewrite vague user queries into more specific, searchable terms using Gemini API.
-    
-    Args:
-        query: Original vague search query
-        api_key: Gemini API key
-        
-    Returns:
-        Rewritten query optimized for search
-    """
-    client = genai.Client(api_key=api_key)
-    
-    prompt = f"""Rewrite this movie search query to be more specific and searchable.
-
-Original: "{query}"
-
-Consider:
-- Common movie knowledge (famous actors, popular films)
-- Genre conventions (horror = scary, animation = cartoon)
-- Keep it concise (under 10 words)
-- It should be a google style search query that's very specific
-- Don't use boolean logic
-
-Examples:
-
-- "that bear movie where leo gets attacked" -> "The Revenant Leonardo DiCaprio bear attack"
-- "movie about bear in london with marmalade" -> "Paddington London marmalade"
-- "scary movie with bear from few years ago" -> "bear horror movie 2015-2020"
-
-Rewritten query:"""
-    
-    response = client.models.generate_content(
-        model="gemini-2.0-flash-001",
-        contents=prompt
-    )
-    
-    # Extract and clean the rewritten query
-    rewritten_query = response.text.strip()
-    
-    # Remove any quotation marks that might be in the response
-    rewritten_query = rewritten_query.strip('"').strip("'")
-    
-    return rewritten_query
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Hybrid Search CLI")
@@ -122,9 +48,15 @@ def main() -> None:
     rrf_search_parser.add_argument(
             "--enhance",
             type=str,
-            choices=["spell","rewrite"],
+            choices=["spell","rewrite", "expand"],
             help="Query enhancement method",
         )
+    rrf_search_parser.add_argument(
+        "--rerank-method",
+        type=str,
+        choices=["individual", "batch", "cross_encoder"],
+        help="Re-ranking method to use after initial search",
+    )
     args = parser.parse_args()
 
     match args.command:
@@ -171,6 +103,8 @@ def main() -> None:
                     enhanced_query = enhance_query_spelling(original_query, api_key)
                 elif args.enhance == "rewrite":
                     enhanced_query = enhance_query_rewrite(original_query, api_key)
+                elif args.enhance == "expand":
+                    enhanced_query = enhance_query_expand(original_query, api_key)
                 else:
                     enhanced_query = original_query
                 
@@ -180,15 +114,65 @@ def main() -> None:
                 
                 query_to_search = enhanced_query
             
+            # Determine the search limit (5x if reranking)
+            search_limit = args.limit * 5 if args.rerank_method else args.limit
+            
             # Load documents and perform search
             documents = load_movies()
             hybrid_search = HybridSearch(documents)
-            results = hybrid_search.rrf_search(query_to_search, args.k, args.limit)
+            results = hybrid_search.rrf_search(query_to_search, args.k, search_limit)
+            
+            # Apply re-ranking if requested
+            if args.rerank_method == "individual":
+                load_dotenv()
+                api_key = os.environ.get("GEMINI_API_KEY")
+                
+                if not api_key:
+                    print("Error: GEMINI_API_KEY not found in environment variables")
+                    return
+                
+                # Only rerank the top 'limit' results, not all search results
+                top_results = results[:args.limit]
+                print(f"Reranking top {len(top_results)} results using {args.rerank_method} method...")
+                results = rerank_individual(query_to_search, top_results, api_key)
+            elif args.rerank_method == "batch":
+                load_dotenv()
+                api_key = os.environ.get("GEMINI_API_KEY")
+                
+                if not api_key:
+                    print("Error: GEMINI_API_KEY not found in environment variables")
+                    return
+                
+                # Rerank using batch method (single API call)
+                top_results = results[:search_limit]
+                print(f"Reranking top {args.limit} results using {args.rerank_method} method...")
+                results = rerank_batch(query_to_search, top_results, api_key)
+            elif args.rerank_method == "cross_encoder":
+                # Rerank using cross-encoder method (no API key needed)
+                top_results = results[:search_limit]
+                print(f"Reranking top {search_limit} results using {args.rerank_method} method...")
+                results = rerank_cross_encoder(query_to_search, top_results)
+            
+            # Print header
+            print(f"Reciprocal Rank Fusion Results for '{query_to_search}' (k={args.k}):\n")
 
-            # Display results
+            # Display results (truncated to limit)
             for i, result in enumerate(results[:args.limit], 1):
                 doc = result["document"]
                 print(f"{i}. {doc['title']}")
+                
+                # Show cross encoder score if available
+                if "cross_encoder_score" in result:
+                    print(f"   Cross Encoder Score: {result['cross_encoder_score']:.3f}")
+                
+                # Show rerank rank if available (batch method)
+                if "rerank_rank" in result:
+                    print(f"   Rerank Rank: {result['rerank_rank']}")
+                
+                # Show rerank score if available (individual method)
+                if "rerank_score" in result:
+                    print(f"   Rerank Score: {result['rerank_score']:.3f}/10")
+                
                 print(f"   RRF Score: {result['rrf_score']:.3f}")
                 
                 # Display ranks
