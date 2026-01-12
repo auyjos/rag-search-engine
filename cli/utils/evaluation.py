@@ -84,6 +84,7 @@ def run_evaluation(limit:int):
 
     total_precision = 0.0
     total_recall = 0.0
+    total_f1 = 0.0
     for test_case in test_cases:
         query = test_case["query"]
         relevant_titles = test_case["relevant_docs"]
@@ -97,13 +98,16 @@ def run_evaluation(limit:int):
         # Calculate precision and recall
         precision = calculate_precision(retrieved_titles, relevant_titles)
         recall = calculate_recall(retrieved_titles, relevant_titles)
+        f1 = calculate_f1(precision, recall)
         total_precision += precision
         total_recall += recall
+        total_f1 += f1
         
         # Print results
         print(f"- Query: {query}")
         print(f"  - Precision@{limit}: {precision:.4f}")
         print(f"  - Recall@{limit}: {recall:.4f}")
+        print(f"  - F1 Score: {f1:.4f}")
         print(f"  - Retrieved: {', '.join(retrieved_titles)}")
         print(f"  - Relevant: {', '.join(relevant_titles)}")
         print()
@@ -111,7 +115,24 @@ def run_evaluation(limit:int):
     # Print average precision and recall
     avg_precision = total_precision / len(test_cases)
     avg_recall = total_recall / len(test_cases)
+    avg_f1 = total_f1 / len(test_cases)
     print(f"Average Precision@{limit}: {avg_precision:.4f}")
     print(f"Average Recall@{limit}: {avg_recall:.4f}")
+    print(f"Average F1 Score: {avg_f1:.4f}")
 
-
+def calculate_f1(precision: float, recall:float) -> float: 
+    """
+    Calculate F1 score: harmonic mean of precision and recall.
+    
+    Args:
+        precision: Precision score
+        recall: Recall score
+        
+    Returns:
+        F1 score between 0 and 1
+    """
+    if precision + recall ==0:
+        return 0.0
+    
+    f1 = 2 * (precision*recall) / (precision + recall)
+    return f1

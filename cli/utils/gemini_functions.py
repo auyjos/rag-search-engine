@@ -1,11 +1,12 @@
 """LLM-based query enhancement utilities using Gemini API."""
 
+import json
 import re
 import time
 
 from google import genai
 from google.genai.errors import ClientError
-from sentence_transformers import CrossEncoder
+from sentence_transformers import CrossEncoder  # Parse the JSON response
 
 
 def enhance_query_spelling(query: str, api_key: str) -> str:
@@ -400,3 +401,73 @@ def rerank_cross_encoder(query:str, results:list)->list:
     results.sort(key=lambda x: x['cross_encoder_score'], reverse=True)
     
     return results
+
+def evaluate_search_results(query:str, results:list, api_key:str) -> None:
+    """
+    Evaluate search results using LLM to rate relevance on a 0-3 scale.
+    
+    Args:
+        query: The search query
+        results: List of search results
+        api_key: Gemini API key
+    """
+
+    client= genai.Client(api_key=api_key)
+    formatted_results = []
+    for i, result in enumerate(results,1):
+        doc = result["document"]
+        title = doc["title"]
+        description = doc.get("description", "")
+        formatted_results.append(f"{i}. {title}: {description}")
+    
+     # Create the evaluation prompt
+    prompt = f"""Rate how relevant each result is to this query on a 0-3 scale:
+
+    Query: "{query}"
+
+    Results:
+    {chr(10).join(formatted_results)}
+
+    Scale:
+    - 3: Highly relevant
+    - 2: Relevant
+    - 1: Marginally relevant
+    - 0: Not relevant
+
+    Do NOT give any numbers out than 0, 1, 2, or 3.
+
+    Return ONLY the scores in the same order you were given the documents. Return a valid JSON list, nothing else. For example:
+
+    [2, 0, 3, 2, 0, 1]"""
+        
+    # Call the LLM
+    response = client.models.generate_content(
+        model="gemini-2.0-flash-001",
+        contents=prompt
+    )
+
+    
+    if response is None or not hasattr(response, 'text') or response.text is None:
+        print("Empty response from API, cannot evaluate results")
+        return
+    
+    response_text = response.text.strip()
+    
+    # Remove markdown code blocks if present
+    if response_text.startswith("```"):
+        # Extract JSON from markdown code block
+        json_match = re.search(r'```(?:json)?\s*(\[.*?\])\s*```', response_text, re.DOTALL)
+        if json_match:
+            response_text = json_match.group(1)
+    
+    try:
+        scores = json.loads(response_text)
+        
+        # Print evaluation report
+        print("Evaluation Report:")
+        for i, (result, score) in enumerate(zip(results, scores), 1):
+            title = result["document"]["title"]
+            print(f"{i}. {title}: {score}/3")
+    except Exception as e:
+        print(f"Error parsing LLM response: {e}")
+        print(f"Response was: {response_text}")

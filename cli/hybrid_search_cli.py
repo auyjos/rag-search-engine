@@ -8,7 +8,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from cli.classes.hybrid_search import HybridSearch
 from cli.utils.gemini_functions import (enhance_query_expand,
                                         enhance_query_rewrite,
-                                        enhance_query_spelling, rerank_batch,
+                                        enhance_query_spelling,
+                                        evaluate_search_results, rerank_batch,
                                         rerank_cross_encoder,
                                         rerank_individual)
 from dotenv import load_dotenv
@@ -56,6 +57,12 @@ def main() -> None:
         type=str,
         choices=["individual", "batch", "cross_encoder"],
         help="Re-ranking method to use after initial search",
+    )
+
+    rrf_search_parser.add_argument(
+        "--evaluate",
+        action="store_true",
+        help="Evaluate search results using LLM",
     )
     args = parser.parse_args()
 
@@ -186,6 +193,18 @@ def main() -> None:
                 print(f"   {desc_preview}")
                 if i < len(results[:args.limit]):
                     print()
+
+            if args.evaluate:
+                load_dotenv()
+                api_key = os.environ.get("GEMINI_API_KEY")
+
+                if not api_key:
+                    print("Error: GEMINI_API_KEY not found in environment variables")
+                    return
+                
+                print("Evaluating results...\n")
+                evaluate_search_results(query_to_search, results[:args.limit], api_key)
+            
 
         case _:
             parser.print_help()
