@@ -1,5 +1,8 @@
 """Multimodal search using CLIP embeddings for text and images."""
 
+import json
+
+import numpy as np
 from PIL import Image
 from sentence_transformers import SentenceTransformer
 
@@ -10,14 +13,32 @@ class MultimodalSearch:
     Uses CLIP models to create embeddings in the same vector space.
     """
     
-    def __init__(self, model_name="clip-ViT-B-32"):
+    def __init__(self, model_name="clip-ViT-B-32", documents=None):
         """
         Initialize the multimodal search with a CLIP model.
         
         Args:
             model_name: Name of the CLIP model to use (default: "clip-ViT-B-32")
+            documents: Optional list of movie documents to index
         """
         self.model = SentenceTransformer(model_name)
+        self.documents = documents or []
+        
+        # Create text representations of documents
+        if self.documents:
+            self.texts = [
+                f"{doc['title']}: {doc['description']}"
+                for doc in self.documents
+            ]
+            
+            # Generate embeddings for all texts
+            self.text_embeddings = self.model.encode(
+                self.texts,
+                show_progress_bar=True
+            )
+        else:
+            self.texts = []
+            self.text_embeddings = None
     
     def embed_image(self, image_path: str):
         """
@@ -36,6 +57,43 @@ class MultimodalSearch:
         embedding = self.model.encode([image])[0]
         
         return embedding
+    
+    def search_with_image(self, image_path: str, limit: int = 5):
+        """
+        Search for similar movies using an image query.
+        
+        Args:
+            image_path: Path to the image file
+            limit: Number of results to return (default: 5)
+            
+        Returns:
+            List of dictionaries containing document info and similarity scores
+        """
+        if self.text_embeddings is None:
+            return []
+        
+        # Generate embedding for the image
+        image_embedding = self.embed_image(image_path)
+        
+        # Calculate cosine similarity with all text embeddings
+        results = []
+        for i, text_embedding in enumerate(self.text_embeddings):
+            # Cosine similarity
+            similarity = np.dot(image_embedding, text_embedding) / (
+                np.linalg.norm(image_embedding) * np.linalg.norm(text_embedding)
+            )
+            
+            doc = self.documents[i]
+            results.append({
+                "id": i,
+                "title": doc["title"],
+                "description": doc.get("description", ""),
+                "similarity": float(similarity)
+            })
+        
+        # Sort by similarity (descending) and return top results
+        results.sort(key=lambda x: x["similarity"], reverse=True)
+        return results[:limit]
 
 
 def verify_image_embedding(image_path: str):
@@ -54,3 +112,27 @@ def verify_image_embedding(image_path: str):
     
     # Print shape
     print(f"Embedding shape: {embedding.shape[0]} dimensions")
+
+
+def image_search_command(image_path: str):
+    """
+    Perform image-based search on the movie dataset.
+    
+    Args:
+        image_path: Path to the image file
+        
+    Returns:
+        List of search results with similarity scores
+    """
+    # Load movie dataset
+    with open("data/movies.json", "r", encoding="utf-8") as f:
+        data = json.load(f)
+    documents = data["movies"]
+    
+    # Create MultimodalSearch instance with documents
+    multimodal_search = MultimodalSearch(documents=documents)
+    
+    # Perform search
+    results = multimodal_search.search_with_image(image_path)
+    
+    return results
