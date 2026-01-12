@@ -1,6 +1,6 @@
 # RAG Search Engine
 
-A comprehensive information retrieval system implementing multiple search methodologies including keyword-based search (BM25), semantic search, and hybrid search approaches. Built as a learning project to understand the fundamentals of Retrieval-Augmented Generation (RAG) systems.
+A comprehensive information retrieval system implementing multiple search methodologies including keyword-based search (BM25), semantic search, hybrid search, and Retrieval-Augmented Generation (RAG) with multimodal capabilities. Built as a learning project to understand the fundamentals of modern search and RAG systems.
 
 ## 📋 Table of Contents
 
@@ -11,19 +11,25 @@ A comprehensive information retrieval system implementing multiple search method
   - [Keyword Search](#keyword-search)
   - [Semantic Search](#semantic-search)
   - [Hybrid Search](#hybrid-search)
+  - [Search Evaluation](#search-evaluation)
+  - [RAG Pipeline](#rag-pipeline)
+  - [Multimodal Search](#multimodal-search)
 - [How It Works](#how-it-works)
 - [Project Structure](#project-structure)
 - [Configuration](#configuration)
 
 ## 🎯 Overview
 
-This project demonstrates the core concepts behind modern search systems by implementing and comparing different search approaches:
+This project demonstrates the core concepts behind modern search systems and Retrieval-Augmented Generation (RAG) by implementing:
 
 - **Keyword Search**: Traditional BM25 (Best Matching 25) algorithm for exact and fuzzy keyword matching
 - **Semantic Search**: Neural embedding-based search that understands meaning and context
-- **Hybrid Search**: Combines keyword and semantic approaches with configurable weighting
+- **Hybrid Search**: Combines keyword and semantic approaches with configurable weighting (RRF)
+- **RAG Pipeline**: Context-aware answer generation with citations and summarization
+- **Multimodal Search**: Image and text-based search using CLIP embeddings
+- **Search Evaluation**: Automated evaluation with Precision@k, Recall@k, F1 Score, and LLM-as-a-judge
 
-The system is built around a dataset of ~5,000 movies, providing a rich corpus for search experimentation.
+The system is built around a dataset of ~5,000 movies, providing a rich corpus for search and RAG experimentation.
 
 ## ✨ Features
 
@@ -41,19 +47,47 @@ The system is built around a dataset of ~5,000 movies, providing a rich corpus f
    - Cosine similarity scoring
    - Sentence-aware chunking with overlap
 
-3. **Hybrid Search**
-   - Min-max score normalization
-   - Weighted combination of BM25 and semantic scores
-   - Configurable alpha parameter (0.0 = pure semantic, 1.0 = pure keyword)
+3. **Reciprocal Rank Fusion (RRF) for combining rankings
+   - Query enhancement (spelling correction, rewriting, expansion)
+   - Re-ranking methods (LLM-based, batch, cross-encoder)
    - Best of both worlds: handles exact matches and conceptual queries
 
-### Additional Features
+4. **Search Evaluation**
+   - Precision@k and Recall@k metrics
+   - F1 Score calculation
+   - LLM-as-a-judge evaluation (0-3 relevance scoring)
+   - Golden dataset testing
 
-- **Caching**: Embeddings and indexes are cached for performance
-- **Chunking**: Smart text chunking with sentence boundaries and overlap
-- **CLI Tools**: Easy-to-use command-line interfaces for all search methods
-- **Extensible**: Modular design for adding new search methods
+5. **RAG Pipeline**
+   - Context-aware answer generation
+   - Multi-document summarization
+   - Citation-aware responses with source references
+   - Conversational question answering
+   - Integration with Google Gemini API
 
+6. **Multimodal Search**
+- Google Gemini API key (for RAG features)
+
+### Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/auyjos/rag-search-engine.git
+cd rag-search-engine
+
+# Install dependencies with uv
+uv sync
+
+# Or with pip
+pip install -r requirements.txt
+
+# Set up environment variables
+cp .env.example .env
+# Add your GEMINI_API_KEY to .env
+```
+
+The first time you run semantic search, it will download the sentence-transformer model (~80MB).
+The first time you run multimodal search, it will download the CLIP model (~60
 ## 🚀 Installation
 
 ### Prerequisites
@@ -135,21 +169,114 @@ uv run cli/hybrid_search_cli.py weighted-search "British detective"
 # Emphasize keywords (alpha=0.8 means 80% keyword, 20% semantic)
 uv run cli/hybrid_search_cli.py weighted-search "The Revenant" --alpha 0.8 --limit 10
 
+# Reciprocal Rank Fusion (RRF) search
+uv run cli/hybrid_search_cli.py rrf-search "bear attack" -k 60 --limit 5
+
+# RRF with query enhancement
+uv run cli/hybrid_search_cli.py rrf-search "beear movie" --enhance spell
+uv run cli/hybrid_search_cli.py rrf-search "that bear movie" --enhance rewrite
+uv run cli/hybrid_search_cli.py rrf-search "grizzly film" --enhance expand
+
+# RRF with re-ranking
+uv run cli/hybrid_search_cli.py rrf-search "intense thriller" --rerank-method cross_encoder
+uv run cli/hybrid_search_cli.py rrf-search "family comedy" --rerank-method batch
+uv run cli/hybrid_search_cli.py rrf-search "action movie" --rerank-method individual
+
+# RRF with evaluation
+uv run cli/hybrid_search_cli.py rrf-search "space adventure" --evaluate
+
 # Emphasize semantics (alpha=0.2 means 20% keyword, 80% semantic)
 uv run cli/hybrid_search_cli.py weighted-search "family movies" --alpha 0.2 --limit 10
 
-# Balanced approach
-uv run cli/hybrid_search_cli.py weighted-search "2015 comedies" --alpha 0.5 --limit 10
+# # Search Evaluation
+
+Evaluate search quality using various metrics:
+
+```bash
+# Run evaluation with golden dataset (default k=5)
+uv run cli/evaluation_cli.py --limit 5
+
+# Output includes:
+# - Precision@k: How many retrieved results are relevant
+# - Recall@k: How many relevant results were retrieved
+# - F1 Score: Harmonic mean of precision and recall
 ```
 
-### Alpha Parameter Guide
+### RAG Pipeline
 
-The alpha (α) parameter controls the balance between keyword and semantic search:
+Generate context-aware answers using retrieved documents:
 
-| Alpha | Distribution | Best For | Example |
-|-------|--------------|----------|---------|
-| 1.0 | 100% Keyword | Exact titles, names, IDs | "The Revenant" |
-| 0.8 | 80% Keyword, 20% Semantic | Specific terms with some context | "Leonardo DiCaprio survival" |
+```bash
+# Basic RAG: Search + Generate answer
+uv run cli/augmented_generation_cli.py rag "what are good dinosaur movies"
+
+# Multi-document summarization
+uv run cli/augmented_generation_cli.py summarize "bear movies" --limit 5
+
+# Answer with citations [1], [2], etc.
+uv run cli/augmented_generation_cli.py citations "intense thriller movies" --limit 5
+
+# Conversational question answering
+uv run cli/augmented_generation_cli.py question "What year was The Revenant released?"
+```
+
+### Multimodal Search
+
+Search using images and text:
+
+```bash
+# Verify image embedding generation
+uv runRF**: Alternative fusion using Reciprocal Rank Fusion: `score = Σ 1/(k + rank)`
+5. **Ranking**: Returns documents sorted by hybrid score
+
+### RAG Pipeline
+
+1. **Retrieval**: Uses hybrid search (RRF) to find relevant documents
+2. **Context Building**: Formats d    # Command-line interfaces
+│   ├── keyword_search_cli.py         # BM25 search CLI
+│   ├── semantic_search_cli.py        # Semantic search CLI
+│   ├── hybrid_search_cli.py          # Hybrid search CLI (RRF, reranking)
+│   ├── evaluation_cli.py             # Search evaluation CLI
+│   ├── augmented_generation_cli.py   # RAG pipeline CLI
+│   ├── describe_image_cli.py         # Multimodal query rewriting CLI
+│   ├── multimodal_search_cli.py      # Image-based search CLI
+│   ├── classes/                      # Core search implementations
+│   │   ├── base_search.py            # Base semantic search class
+│   │   ├── chunk_search.py           # Chunk-level semantic search
+│   │   ├── document_search.py        # Document-level semantic search
+│   │   ├── hybrid_search.py          # Hybrid search (weighted + RRF)
+│   │   ├── invert_index.py           # Inverted index & BM25
+│   │   └── semantic_search.py        # Legacy compatibility layer
+│   ├── lib/                          # Library modules
+│   │   └── multimodal_search.py      # CLIP-based multimodal search
+│   ├── commands/                     # Command handlers
+│   │   ├── embedding_commands.py     # Embedding generation commands
+│   │   └── search_commands.py        # Search commands
+│   ├── utils/                        # Utility functions
+│   │   ├── cache.py                  # Caching for embeddings
+│   │   ├── chunking.py               # Text chunking utilities
+│   │   ├── similarity.py             # Similarity calculations
+│   │   ├── evaluation.py             # Evaluation metrics
+│   │   ├── gemini_functions.py       # Gemini API functions
+│   │   ├── augmented_generation.py   # RAG helper functions
+│   │   └── image_description.py      # Multimodal query rewriting
+│   └── config.py                     # Configuration settings
+├── data/                             # Data files
+│   ├── movies.json                   # Movie dataset (~5,000 movies)
+│   ├── golden_dataset.json           # Test cases for evaluation
+│   ├── stopwords.txt                 # Stopwords for keyword search
+│   └── paddington.jpeg               # Sample image for multimodal search
+├── helpers/                          # Helper modules
+│   ├── constants.py                  # BM25 and API constants
+│   ├── tokenizer.py                  # Text tokenization
+│   └── load_movies.py                # Movie dataset loader
+├── cache/                            # Generated cache files
+│   ├── chunk_embeddings.npy          # Cached chunk embeddings
+│   ├── chunk_metadata.json           # Chunk metadata
+│   ├── index.pkl                     # Inverted index
+│   └── ...                           # Other cache files
+├── .env                              # Environment variables (API keys)
+└── pyproject.toml    d, 20% Semantic | Specific terms with some context | "Leonardo DiCaprio survival" |
 | 0.5 | 50/50 Split | Balanced queries | "2015 adventure films" |
 | 0.2 | 20% Keyword, 80% Semantic | Conceptual searches | "movies about redemption" |
 | 0.0 | 100% Semantic | Abstract concepts | "finding yourself" |
@@ -190,20 +317,37 @@ rag-search-engine/
 │   │   ├── base_search.py        # Base semantic search class
 │   │   ├── chunk_search.py       # Chunk-level semantic search
 │   │   ├── document_search.py    # Document-level semantic search
-│   │   ├── hybrid_search.py      # Hybrid search implementation
-│   │   ├── invert_index.py       # Inverted index & BM25
-│   │   └── semantic_search.py    # Legacy compatibility layer
-│   ├── commands/                 # Command handlers
-│   │   ├── embedding_commands.py # Embedding generation commands
-│   │   └── search_commands.py    # Search commands
-│   ├── utils/                    # Utility functions
-│   │   ├── cache.py              # Caching for embeddings
-│   │   ├── chunking.py           # Text chunking utilities
-│   │   └── similarity.py         # Similarity calculations
-│   └── config.py                 # Configuration settings
-├── data/                         # Data files
-│   ├── movies.json               # Movie dataset (~5,000 movies)
-│   └── stopwords.txt             # Stopwords for keyword search
+│   │  s
+DEFAULT_MODEL = "all-MiniLM-L6-v2"  # Sentence transformer model
+MULTIMODAL_MODEL = "clip-ViT-B-32"  # CLIP model for images
+
+# Chunking
+DEFAULT_CHUNK_SIZE = 4              # Sentences per chunk
+DEFAULT_OVERLAP = 1                 # Overlapping sentences
+
+# Search
+DEFAULT_SEARCH_LIMIT = 5            # Default number of results
+SCORE_PRECISION = 4                 # Decimal places for scores
+
+# BM25 (in helpers/constants.py)
+BM25_K1 = 1.5                       # Term saturation parameter
+BM25_B = 0.75                       # Length normalization parameter
+
+# RRF
+RRF_K = 60                          # Default k parameter for RRF
+
+# API
+GEMINI_MODEL = "gemini-2.0-flash-001"  # Gemini model for RAG
+MAX_RETRIES = 3                     # API retry attempts
+RETRY_DELAY = 30                    # Initial retry delay (seconds)
+```
+
+### Environment Variables
+
+Create a `.env` file in the project root:
+
+```bash
+GEMINI_API_KEY=your_api_key_here
 ├── helpers/                      # Helper modules
 │   ├── constants.py              # BM25 constants
 │   └── tokenizer.py              # Text tokenization
@@ -211,8 +355,13 @@ rag-search-engine/
 │   ├── chunk_embeddings.npy      # Cached chunk embeddings
 │   ├── chunk_metadata.json       # Chunk metadata
 │   ├── index.pkl                 # Inverted index
-│   └── ...                       # Other cache files
-└── pyproject.toml                # Project configuration
+│   └── ...                       # Other cache files, RRF
+- **RAG Implementation**: Context-aware generation, prompt engineering, citations
+- **Multimodal AI**: Cross-modal embeddings, image-text similarity (CLIP)
+- **Search Evaluation**: Precision/Recall/F1, LLM-as-a-judge, golden datasets
+- **API Integration**: Gemini API, retry logic, rate limiting, error handling
+- **Query Enhancement**: Spelling correction, query rewriting, expansion
+- **Re-ranking**: LLM-based, cross-encoder, batch processing
 ```
 
 ## ⚙️ Configuration
